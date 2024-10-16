@@ -90,15 +90,18 @@ void SendCommand(const char* str,int timeout){
 			if(HAL_GetTick()-tickStart > timeout){
 				HAL_UART_Transmit(&huart3,ESP_Response,strlen((char*)ESP_Response),HAL_MAX_DELAY);
 				memset(ESP_Response,0,sizeof(ESP_Response));
+				count_data_come = 0;
 				return;
 			}
 			if(strstr((char*)ESP_Response,(char*)OKE_response) != NULL){
 					Flag_Response = 1;
 					memset(ESP_Response,0,sizeof(ESP_Response));
+					count_data_come = 0;
 			}
 			else if(strstr((char*)ESP_Response,(char*)ERROR_response) != NULL){ //strcmp((char*)ESP_Response,(char*)ERROR_response)
 					Flag_Response = 2;
 					memset(ESP_Response,0,sizeof(ESP_Response));
+					count_data_come = 0;
 			}
 		}
 	}
@@ -111,7 +114,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle){
 	}
 }
 void ESP32_INIT(){
-		SendCommand("AT+RESTORE",2000);
+		SendCommand("AT+RESTORE\r\n",2000);
 	  	if(Flag_Response==1){
 	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CHECK OKE\r",sizeof("AT CHECK OKE\r"),HAL_MAX_DELAY);
 	  	}
@@ -135,7 +138,7 @@ void ESP32_INIT(){
 	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPSTA ERROR\r",sizeof("AT CIPSTA ERROR\r"),HAL_MAX_DELAY);
 	  	}
 	  	Flag_Response = 0;
-	  	SendCommand("AT+CWJAP=\"v\",\"nguyen12345\"\r\n",5000);
+	  	SendCommand("AT+CWJAP=\"v\",\"ccthanh123\"\r\n",20000);
 	  	if(Flag_Response==1){
 	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT WIFI OKE\r",sizeof("AT WIFI OKE\r"),HAL_MAX_DELAY);
 	  	}
@@ -201,6 +204,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  ESP32_INIT();
   while (1)
   {
     /* USER CODE END WHILE */

@@ -81,28 +81,50 @@ int count_data_come = 0;
 int command_size = 0;
 int Flag_Response = 0;
 
-void SendCommand(const char* str,int timeout){
-	int tickStart = HAL_GetTick();
+int count_data_come = 0;
+int command_size = 0;
+int idx = 0;
+void SendCommand(const char* str){
 	command_size = strlen(str);
 	if(HAL_UART_Transmit(&huart1,(uint8_t*)str,strlen(str),HAL_MAX_DELAY)==HAL_OK){
 		HAL_UART_Receive_IT(&huart1, data_byte_receive,1);
-		while(Flag_Response == 0){
-			if(HAL_GetTick()-tickStart > timeout){
-				HAL_UART_Transmit(&huart3,ESP_Response,strlen((char*)ESP_Response),HAL_MAX_DELAY);
-				memset(ESP_Response,0,sizeof(ESP_Response));
-				count_data_come = 0;
-				return;
-			}
-			if(strstr((char*)ESP_Response,(char*)OKE_response) != NULL){
-					Flag_Response = 1;
-					memset(ESP_Response,0,sizeof(ESP_Response));
-					count_data_come = 0;
-			}
-			else if(strstr((char*)ESP_Response,(char*)ERROR_response) != NULL){ //strcmp((char*)ESP_Response,(char*)ERROR_response)
-					Flag_Response = 2;
-					memset(ESP_Response,0,sizeof(ESP_Response));
-					count_data_come = 0;
-			}
+	}
+}
+int WaitingForResponse(int timeout){
+	int tickStart = HAL_GetTick();
+	while(idx == 0){
+		if(HAL_GetTick()-tickStart > timeout){
+			HAL_UART_Transmit(&huart3,ESP_Response,strlen((char*)ESP_Response),HAL_MAX_DELAY);
+			memset(ESP_Response,0,sizeof(ESP_Response));
+			idx = 0;
+			count_data_come = 0;
+			return -1;
+		}
+	}
+	int pos = idx - 9;
+	int j = 0;
+	if(pos<0){
+		pos = idx - 9 + 40;
+	}
+	while(pos!=idx){
+		response_state[j++] = ESP_Response[pos++];
+		if(pos>=40) pos = 0;
+	}
+	if(strstr((char*)response_state,(char*)"OK")!=NULL){
+		return 1;
+	}
+	else if(strstr((char*)response_state,(char*)"ERROR")!=NULL){
+		return 0;
+	}
+	return -1;
+}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle){
+	HAL_UART_Receive_IT(&huart1, data_byte_receive,1);
+	count_data_come++;
+	if(count_data_come > command_size){
+		ESP_Response[idx++] = data_byte_receive[0];
+		if(idx >=40){
+			idx = 0;
 		}
 	}
 }

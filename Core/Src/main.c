@@ -21,8 +21,10 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stdlib.h"
 #include "string.h"
 #include "MFRC522.h"
+#include "stdio.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -71,96 +73,135 @@ static void MX_USART3_UART_Init(void);
 //uint8_t sNum[5];
 //uint8_t tx_buffer[] = "Is New Card!";
 //uint8_t keyA[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
-//uint8_t read_buffer[MAX_LEN] = {0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F};
 uint8_t data_byte_receive[1];
-uint8_t ESP_Response[30]="";
-uint8_t OKE_response[6]="\r\nOK\r\n";
-uint8_t ERROR_response[9]="\r\nERROR\r\n";
+uint8_t ESP_Response[100];
+
+char buffer[50]="";
+char SSID[]="\"v\"";
+char Pass[]="\"nguyen12345\"";
 
 int count_data_come = 0;
 int command_size = 0;
 int Flag_Response = 0;
-
-void SendCommand(const char* str,int timeout){
-	int tickStart = HAL_GetTick();
+int idx = 0;
+int client_count = 0;
+void SendCommand(char* str){
 	command_size = strlen(str);
 	if(HAL_UART_Transmit(&huart1,(uint8_t*)str,strlen(str),HAL_MAX_DELAY)==HAL_OK){
 		HAL_UART_Receive_IT(&huart1, data_byte_receive,1);
-		while(Flag_Response == 0){
-			if(HAL_GetTick()-tickStart > timeout){
-				HAL_UART_Transmit(&huart3,ESP_Response,strlen((char*)ESP_Response),HAL_MAX_DELAY);
-				memset(ESP_Response,0,sizeof(ESP_Response));
-				count_data_come = 0;
-				return;
-			}
-			if(strstr((char*)ESP_Response,(char*)OKE_response) != NULL){
-					Flag_Response = 1;
-					memset(ESP_Response,0,sizeof(ESP_Response));
-					count_data_come = 0;
-			}
-			else if(strstr((char*)ESP_Response,(char*)ERROR_response) != NULL){ //strcmp((char*)ESP_Response,(char*)ERROR_response)
-					Flag_Response = 2;
-					memset(ESP_Response,0,sizeof(ESP_Response));
-					count_data_come = 0;
-			}
+	}
+}
+void WaitForResponse(int timeout,char* OKE_response,char* Error_response){
+	int tickStart = HAL_GetTick();
+	while(Flag_Response == 0){
+		if(HAL_GetTick()-tickStart > timeout){
+			HAL_UART_Transmit(&huart3,ESP_Response,strlen((char*)ESP_Response),HAL_MAX_DELAY);
+			count_data_come = 0;
+			idx=0;
+			return;
+		}
+		if(strstr((char*)ESP_Response,OKE_response) != NULL){
+			Flag_Response = 1;
+			count_data_come = 0;
+		}
+		else if(strstr((char*)ESP_Response,Error_response) != NULL){ //strcmp((char*)ESP_Response,(char*)ERROR_response)
+			Flag_Response = 2;
+			count_data_come = 0;
 		}
 	}
+	idx=0;
 }
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle){
 	HAL_UART_Receive_IT(&huart1, data_byte_receive,1);
 	count_data_come++;
 	if(count_data_come > command_size){
-		strcat((char*)ESP_Response,(char*)data_byte_receive);
+		ESP_Response[idx++] = data_byte_receive[0];
+		if(idx>=50){
+			idx = 0;
+		}
+		if(data_byte_receive[0]=='+'){
+			client_count++;
+		}
 	}
 }
-void ESP32_INIT(){
-		SendCommand("AT+RESTORE\r\n",2000);
-	  	if(Flag_Response==1){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CHECK OKE\r",sizeof("AT CHECK OKE\r"),HAL_MAX_DELAY);
-	  	}
-	  	else if(Flag_Response==2){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CHECK ERROR\r",sizeof("AT CHECK ERROR\r"),HAL_MAX_DELAY);
-	  	}
-	  	Flag_Response = 0;
-	  	SendCommand("AT+CWMODE=1\r\n",5000);
-	  	if(Flag_Response==1){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CWMODE OKE\r",sizeof("AT CWMODE OKE\r"),HAL_MAX_DELAY);
-	  	}
-	  	else if(Flag_Response==2){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CWMODE ERROR\r",sizeof("AT CWMODE ERROR\r"),HAL_MAX_DELAY);
-	  	}
-		Flag_Response = 0;
-	  	SendCommand("AT+CIPSTA=\"192.168.6.100\",\"192.168.6.1\",\"255.255.255.0\"\r\n",5000);
-	  	if(Flag_Response==1){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPSTA OKE\r",sizeof("AT CIPSTA OKE\r"),HAL_MAX_DELAY);
-	  	}
-	  	else if(Flag_Response==2){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPSTA ERROR\r",sizeof("AT CIPSTA ERROR\r"),HAL_MAX_DELAY);
-	  	}
-	  	Flag_Response = 0;
-	  	SendCommand("AT+CWJAP=\"v\",\"ccthanh123\"\r\n",20000);
-	  	if(Flag_Response==1){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT WIFI OKE\r",sizeof("AT WIFI OKE\r"),HAL_MAX_DELAY);
-	  	}
-	  	else if(Flag_Response==2){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT WIFI ERROR\r",sizeof("AT WIFI ERROR\r"),HAL_MAX_DELAY);
-	  	}
-	  	Flag_Response = 0;
-	  	SendCommand("AT+CIPMUX=1\r\n",5000);
-	  	if(Flag_Response==1){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPMUX OKE\r",sizeof("AT CIPMUX OKE\r"),HAL_MAX_DELAY);
-	  	}
-	  	else if(Flag_Response==2){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPMUX ERROR\r",sizeof("AT CIPMUX ERROR\r"),HAL_MAX_DELAY);
-	  	}
-	  	Flag_Response = 0;
-	  	SendCommand("AT+CIPSERVER=1,80\r\n",5000);
-	  	if(Flag_Response==1){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPSERVER OKE\r",sizeof("AT CIPSERVER OKE\r"),HAL_MAX_DELAY);
-	  	}
-	  	else if(Flag_Response==2){
-	  		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPSERVER ERROR\r",sizeof("AT CIPSERVER ERROR\r"),HAL_MAX_DELAY);
-	  	}
+void ESP32_Init(){
+	SendCommand("AT+RESTORE\r\n");
+	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
+	if(Flag_Response==1){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CHECK OKE\r",sizeof("AT CHECK OKE\r"),HAL_MAX_DELAY);
+	}
+	else if(Flag_Response==2){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CHECK ERROR\r",sizeof("AT CHECK ERROR\r"),HAL_MAX_DELAY);
+	}
+	memset(ESP_Response,0,sizeof(ESP_Response));
+
+	Flag_Response = 0;
+	SendCommand("AT\r\n");
+	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
+	if(Flag_Response==1){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CHECK OKE\r",sizeof("AT CHECK OKE\r"),HAL_MAX_DELAY);
+	}
+	else if(Flag_Response==2){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CHECK ERROR\r",sizeof("AT CHECK ERROR\r"),HAL_MAX_DELAY);
+	}
+	memset(ESP_Response,0,sizeof(ESP_Response));
+
+	Flag_Response = 0;
+	SendCommand("AT+CWMODE=1\r\n");
+	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
+	if(Flag_Response==1){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CWMODE OKE\r",sizeof("AT CWMODE OKE\r"),HAL_MAX_DELAY);
+	}
+	else if(Flag_Response==2){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CWMODE ERROR\r",sizeof("AT CWMODE ERROR\r"),HAL_MAX_DELAY);
+	}
+	memset(ESP_Response,0,sizeof(ESP_Response));
+	Flag_Response = 0;
+	sprintf(buffer,"AT+CWJAP=%s,%s\r\n",SSID,Pass);
+	SendCommand(buffer);
+	WaitForResponse(10000,"OK","ERROR");
+	if(Flag_Response==1){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CWJAP OKE\r",sizeof("AT CWJAP OKE\r"),HAL_MAX_DELAY);
+	}
+	else if(Flag_Response==2){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CWJAP ERROR\r",sizeof("AT CWJAP ERROR\r"),HAL_MAX_DELAY);
+	}
+	memset(ESP_Response,0,sizeof(ESP_Response));
+	Flag_Response = 0;
+	SendCommand("AT+CIPMUX=1\r\n");
+	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
+	if(Flag_Response==1){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPMUX OKE\r",sizeof("AT CIPMUX OKE\r"),HAL_MAX_DELAY);
+		}
+	else if(Flag_Response==2){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPMUX ERROR\r",sizeof("AT CIPMUX ERROR\r"),HAL_MAX_DELAY);
+	}
+
+	Flag_Response = 0;
+	SendCommand("AT+CIPSERVER=1,80\r\n");
+	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
+	if(Flag_Response==1){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPSERVER OKE\r",sizeof("AT CIPSERVER OKE\r"),HAL_MAX_DELAY);
+	}
+	else if(Flag_Response==2){
+		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPSERVER ERROR\r",sizeof("AT CIPSERVER ERROR\r"),HAL_MAX_DELAY);
+	}
+}
+void Server_Send();
+void Server_Handle(){
+
+}
+void Server_On(){
+	// Waiting for connect
+	// if multiple connect
+	SendCommand("AT+CIPSTATE?\r\n");
+	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
+	for(int linkId=0;linkId<client_count;linkId++){
+
+	}
+	SendCommand("AT+CIPCLOSE=5\r\n");
+	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
+	client_count=0;
 }
 /* USER CODE END 0 */
 
@@ -199,31 +240,17 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
   MFRC522_Init();
+  ESP32_Init();
   //HAL_TIM_OnePulse_Start(&htim2, TIM_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  ESP32_INIT();
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-//	  if(MFRC522_Request(PICC_REQIDL, str)==MI_OK){
-//		  if(MFRC522_Anticoll(str)==MI_OK){
-////			  int status = MFRC522_SelectTag(str);
-////			  if(status >0){
-////				  status = MFRC522_Auth(0x61, 8, (uchar *)keyA ,(uchar *)str);
-////				  if(status == MI_OK){
-////					  status = MFRC522_Read(8, read_buffer);
-////					  HAL_UART_Transmit(&huart1,read_buffer,sizeof(read_buffer),HAL_MAX_DELAY);
-////				  }
-////				  else HAL_UART_Transmit(&huart1,(uint8_t *)"NO",sizeof("NO"),HAL_MAX_DELAY);
-////			  }
-//			  HAL_UART_Transmit(&huart1,(uint8_t *)"NO",sizeof("NO"),HAL_MAX_DELAY);
-//		  }
-//	  }
   }
   /* USER CODE END 3 */
 }
@@ -519,7 +546,6 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
-	Flag_Response = 1;
 }
 /* USER CODE END 4 */
 

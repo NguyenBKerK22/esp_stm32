@@ -78,26 +78,29 @@ uint8_t ESP_Response[100];
 
 char buffer[50]="";
 char SSID[]="\"v\"";
-char Pass[]="\"nguyen12345\"";
+char Pass[]="\"ccthanh123\"";
 
 int count_data_come = 0;
 int command_size = 0;
 int Flag_Response = 0;
 int idx = 0;
-int client_count = 0;
+int client_list[5]= {0,0,0,0,0};
+char* temp = NULL;
+
 void SendCommand(char* str){
 	command_size = strlen(str);
 	if(HAL_UART_Transmit(&huart1,(uint8_t*)str,strlen(str),HAL_MAX_DELAY)==HAL_OK){
 		HAL_UART_Receive_IT(&huart1, data_byte_receive,1);
 	}
 }
-void WaitForResponse(int timeout,char* OKE_response,char* Error_response){
-	int tickStart = HAL_GetTick();
+void WaitForResponse(uint32_t timeout,char* OKE_response,char* Error_response){
+	uint32_t tickStart = HAL_GetTick();
 	while(Flag_Response == 0){
 		if(HAL_GetTick()-tickStart > timeout){
 			HAL_UART_Transmit(&huart3,ESP_Response,strlen((char*)ESP_Response),HAL_MAX_DELAY);
 			count_data_come = 0;
 			idx=0;
+//			memset(ESP_Response,0,sizeof(ESP_Response));
 			return;
 		}
 		if(strstr((char*)ESP_Response,OKE_response) != NULL){
@@ -108,25 +111,28 @@ void WaitForResponse(int timeout,char* OKE_response,char* Error_response){
 			Flag_Response = 2;
 			count_data_come = 0;
 		}
+		if(temp==NULL) temp = strstr((char*)ESP_Response,"CIPSTATE:");
+		else {
+			client_list[(*(temp+9))-48] = 1;
+		}
 	}
 	idx=0;
+//	memset(ESP_Response,0,sizeof(ESP_Response));
 }
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle){
-	HAL_UART_Receive_IT(&huart1, data_byte_receive,1);
+	if(Flag_Response==0)HAL_UART_Receive_IT(&huart1, data_byte_receive,1);
 	count_data_come++;
 	if(count_data_come > command_size){
 		ESP_Response[idx++] = data_byte_receive[0];
-		if(idx>=50){
+		if(idx>=100||data_byte_receive[0]=='+'){
 			idx = 0;
-		}
-		if(data_byte_receive[0]=='+'){
-			client_count++;
+			temp=NULL;
 		}
 	}
 }
 void ESP32_Init(){
 	SendCommand("AT+RESTORE\r\n");
-	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
+	WaitForResponse(5000,"ready","ERROR\r\n");
 	if(Flag_Response==1){
 		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CHECK OKE\r",sizeof("AT CHECK OKE\r"),HAL_MAX_DELAY);
 	}
@@ -156,9 +162,11 @@ void ESP32_Init(){
 		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CWMODE ERROR\r",sizeof("AT CWMODE ERROR\r"),HAL_MAX_DELAY);
 	}
 	memset(ESP_Response,0,sizeof(ESP_Response));
+
 	Flag_Response = 0;
 	sprintf(buffer,"AT+CWJAP=%s,%s\r\n",SSID,Pass);
 	SendCommand(buffer);
+	memset(buffer,0,sizeof(buffer));
 	WaitForResponse(10000,"OK","ERROR");
 	if(Flag_Response==1){
 		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CWJAP OKE\r",sizeof("AT CWJAP OKE\r"),HAL_MAX_DELAY);
@@ -167,6 +175,7 @@ void ESP32_Init(){
 		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CWJAP ERROR\r",sizeof("AT CWJAP ERROR\r"),HAL_MAX_DELAY);
 	}
 	memset(ESP_Response,0,sizeof(ESP_Response));
+
 	Flag_Response = 0;
 	SendCommand("AT+CIPMUX=1\r\n");
 	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
@@ -176,6 +185,7 @@ void ESP32_Init(){
 	else if(Flag_Response==2){
 		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPMUX ERROR\r",sizeof("AT CIPMUX ERROR\r"),HAL_MAX_DELAY);
 	}
+	memset(ESP_Response,0,sizeof(ESP_Response));
 
 	Flag_Response = 0;
 	SendCommand("AT+CIPSERVER=1,80\r\n");
@@ -186,22 +196,30 @@ void ESP32_Init(){
 	else if(Flag_Response==2){
 		HAL_UART_Transmit(&huart3,(uint8_t*)"AT CIPSERVER ERROR\r",sizeof("AT CIPSERVER ERROR\r"),HAL_MAX_DELAY);
 	}
+	memset(ESP_Response,0,sizeof(ESP_Response));
 }
 void Server_Send();
-void Server_Handle(){
-
-}
+void Server_Handle(){}
 void Server_On(){
-	// Waiting for connect
-	// if multiple connect
+	Flag_Response=0;
 	SendCommand("AT+CIPSTATE?\r\n");
-	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
-	for(int linkId=0;linkId<client_count;linkId++){
-
+	WaitForResponse(5000,"OK\r\n", "ERROR\r\n");
+	memset(ESP_Response,0,sizeof(ESP_Response));
+	for(int i=0;i<5;i++){
+		if(*(client_list+i)==1){
+			Flag_Response=0;
+			sprintf("AT+CIPSEND=%d,4\r\n",i);
+			SendCommand(buffer);
+			WaitForResponse(5000,"OK\r\n>", "ERROR\r\n");
+			memset(ESP_Response,0,sizeof(ESP_Response));
+			if(Flag_Response==1){
+				HAL_UART_Transmit(&huart1, (uint8_t*)"hehe", 4, HAL_MAX_DELAY);
+			}
+			else{
+				HAL_UART_Transmit(&huart3, (uint8_t*)"BUG", 3, HAL_MAX_DELAY);
+			}
+		}
 	}
-	SendCommand("AT+CIPCLOSE=5\r\n");
-	WaitForResponse(5000,"OK\r\n","ERROR\r\n");
-	client_count=0;
 }
 /* USER CODE END 0 */
 
